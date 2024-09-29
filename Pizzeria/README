@@ -10,3 +10,4 @@ Scaffold-DbContext 'Server=127.0.0.1;User ID=root;Password='password';Database=p
 ## Comando di compilazione
 
 dotnet publish -o  C:\\inetpub\\sites\\pizzeria /p:EnvironmentName=Development  /p:Configuration=Release /p:RestorePackagesConfig=true /p:EnableMSDeployAppOffline=true /p:MSDeployUseChecksum=true
+

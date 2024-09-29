@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Runtime.Serialization;
 using System.Xml.Linq;
 
-namespace ModelViews
+namespace Helpers
 {
 	public static class Utilities
 	{

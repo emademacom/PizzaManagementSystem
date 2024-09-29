@@ -6,6 +6,7 @@ using ModelDto.Models;
 using ModelViews;
 using Swashbuckle.AspNetCore.Annotations;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.Metrics;
 
 namespace Pizzeria.Controllers
 {
@@ -14,11 +15,17 @@ namespace Pizzeria.Controllers
 	public class OrderController : ControllerBase
 	{		
 		private readonly ILogger<OrderController> _logger;
-		private MyContext context;
+		private MyContext context;		
+		private int orderCounter;
+		private DateTime? dataCorrente = null;
+		private readonly object lockObject = new object(); // Oggetto per il lock
+		
 		public OrderController(ILogger<OrderController> logger, MyContext context)
 		{
 			_logger = logger;
-			this.context = context;
+			this.context = context;			
+			orderCounter = 0;
+			dataCorrente = null;
 		}
 
 		[HttpPost]
@@ -47,10 +54,10 @@ namespace Pizzeria.Controllers
 				
 				Order order = new Order();
 				order.Id = Utilities.GenerateGuid(); //con SQL Server non necessario Guid incluso
-				order.Codice = Utilities.GenerateUniqueId().ToUpper();
-				if (String.IsNullOrEmpty(_order.Customername))
+				order.Codice = GenerateNewCode().ToString("D4");
+				if (!String.IsNullOrEmpty(_order.Customername))
 					order.Customername = _order.Customername;
-				if (String.IsNullOrEmpty(_order.Customername))
+				if (!String.IsNullOrEmpty(_order.Customername))
 					order.Customermobile = _order.Customermobile;
 				order.CreatedAt = DateTime.Now;
 				order.UpdatedAt = DateTime.Now;
@@ -90,6 +97,7 @@ namespace Pizzeria.Controllers
 				result.queueNumber = context.Orders
 					.Where(x => (x.IsCompleted == null || x.IsCompleted == 0)
 						&& x.Codice != order.Codice
+						&& x.CreatedAt.HasValue && x.CreatedAt.Value.Date == DateTime.Today.Date
 					)
 					.Count();
 				return Ok(result);
@@ -126,7 +134,9 @@ namespace Pizzeria.Controllers
 				order.UpdatedAt = DateTime.Now;
 				context.SaveChanges();
 				int result = context.Orders
-					.Where(x => (x.IsCompleted == null || x.IsCompleted == 0))
+					.Where(x => (x.IsCompleted == null || x.IsCompleted == 0)
+						&& x.CreatedAt.HasValue && x.CreatedAt.Value.Date == DateTime.Today.Date
+					)
 					.Count();
 
 				return Ok(result);
@@ -147,8 +157,10 @@ namespace Pizzeria.Controllers
 		public IActionResult orderToPrepare()
 		{
 			Order _order = context.Orders
-				.Where(x => (x.IsCompleted == null || x.IsCompleted == 0))
-				.OrderBy(x => x.CreatedAt)
+				.Where(x => (x.IsCompleted == null || x.IsCompleted == 0) 
+					&& x.CreatedAt.HasValue && x.CreatedAt.Value.Date == DateTime.Today.Date
+				)
+				.OrderBy(x => x.Codice)
 				.FirstOrDefault();
 			if (_order == null)
 				return Ok();
@@ -160,11 +172,13 @@ namespace Pizzeria.Controllers
 			result.details = new List<OrderModelViewDetailResponse>();
 			double totQty = 0;
 			double totPrice = 0;
+			List<OrderDetail> details = context.OrderDetails.Where(x => x.OrderId.ToUpper() == _order.Id).ToList();
 			foreach (OrderDetail detail in _order.OrderDetails) {
 				OrderModelViewDetailResponse det = new OrderModelViewDetailResponse();
 				det.Name = detail.Name;
 				det.Qty = detail.Qty;
-				det.Price = detail.Price;				
+				det.Price = detail.Price;
+				result.details.Add(det);
 				totQty += detail.Qty??1;
 				totPrice += ((detail.Qty??1) * detail.Price??0);				
 			}
@@ -172,5 +186,29 @@ namespace Pizzeria.Controllers
 			result.totalQty = totQty.ToString();
 			return Ok(result);
 		}
+
+		#region private
+		private int GenerateNewCode()
+		{			
+			lock (lockObject) // Blocca il contatore per accesso concorrente
+			{
+				/* Allo startup lo risetto */
+				if (dataCorrente == null)
+				{										
+					orderCounter = context.Orders.Where(x => x.CreatedAt.HasValue && x.CreatedAt.Value.Date == DateTime.Today.Date).Count();					
+					dataCorrente = context.Orders.Where(x => x.CreatedAt.HasValue).OrderByDescending(x=> x.CreatedAt.Value).Select(x=>x.CreatedAt.Value).FirstOrDefault();
+				}				
+				if (DateTime.Today > dataCorrente)
+				{
+					// Resetta il contatore e aggiorna la data
+					dataCorrente = DateTime.Today;
+					orderCounter = 0;
+				}
+				orderCounter++;
+				// Incrementa il contatore degli ordini e restituisce il numero
+				return orderCounter;
+			}
+		}
+		#endregion
 	}
 }
