@@ -1,0 +1,12 @@
+## SCAFFOLD 
+Comando per aggiornamento delle Tabelle del Database
+
+Scaffold-DbContext 'Server=127.0.0.1;User ID=root;Password='password';Database=pizza' MySql.EntityFrameworkCore -OutputDir ../ModelDto/Models -Context MyContext -Namespace ModelDto.Models -NoOnConfiguring -f
+
+## CREATES MIGRATION
+
+ Add-Migration <Name>  -Context MyContext  -OutputDir ../ModelDto/Migrations/MariaDB
+
+## Comando di compilazione
+
+dotnet publish -o  C:\\inetpub\\sites\\pizzeria /p:EnvironmentName=Development  /p:Configuration=Release /p:RestorePackagesConfig=true /p:EnableMSDeployAppOffline=true /p:MSDeployUseChecksum=true
